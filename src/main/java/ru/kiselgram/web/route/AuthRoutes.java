@@ -226,11 +226,36 @@ public class AuthRoutes {
         app.post("/api/auth/register-verify-code", ctx -> {
             Map<String, Object> body = ctx.bodyAsClass(Map.class);
             String code = (String) body.get("code");
-            if (code == null || code.equals("000000")) {
-                ctx.json(Map.of("success", true, "data", Map.of("verified", true)));
-            } else {
+            String email = (String) body.get("email");
+            if (code == null || code.isBlank()) {
                 ctx.json(Map.of("success", false, "error",
+                    Map.of("code", "INVALID_CODE", "message", "Code required")));
+                return;
+            }
+            try (Session s = getInstance().getSessionFactory().openSession()) {
+                org.hibernate.query.Query<EmailVerification> q = s.createQuery(
+                    "FROM EmailVerification WHERE verificationCode = :code AND isVerified = false" +
+                    (email != null ? " AND email = :em" : ""),
+                    EmailVerification.class);
+                q.setParameter("code", code);
+                if (email != null) q.setParameter("em", email);
+                q.setMaxResults(1);
+                EmailVerification ev = q.uniqueResultOptional().orElse(null);
+                if (ev == null || (ev.getExpiresAt() != null && ev.getExpiresAt().isBefore(LocalDateTime.now()))) {
+                    ctx.json(Map.of("success", false, "error",
                         Map.of("code", "INVALID_CODE", "message", "Invalid verification code")));
+                    return;
+                }
+                s.beginTransaction();
+                ev.setVerified(true);
+                ev.setVerifiedAt(LocalDateTime.now());
+                s.merge(ev);
+                s.getTransaction().commit();
+                ctx.json(Map.of("success", true, "data", Map.of("verified", true)));
+            } catch (Exception e) {
+                e.printStackTrace();
+                ctx.json(Map.of("success", false, "error",
+                    Map.of("code", "ERROR", "message", "Verification failed")));
             }
         });
 
