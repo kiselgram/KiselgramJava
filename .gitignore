@@ -44,3 +44,10 @@ data/
 
 ### Mac OS ###
 .DS_Store
+
+### Python ###
+__pycache__/
+*.py[codz]
+.env
+.venv
+venv/
