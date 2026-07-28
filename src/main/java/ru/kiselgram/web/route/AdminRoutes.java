@@ -10,10 +10,10 @@ import ru.kiselgram.web.util.Helpers;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 public class AdminRoutes {
 
@@ -35,49 +35,18 @@ public class AdminRoutes {
                 if (opt.isPresent() && opt.get().isAdmin() && opt.get().checkPassword(password))
                     user = opt.get();
             }
-            try {
-                String html = Files.readString(Path.of(
-                    "/Users/dkisel/PycharmProjects/kiselgram-dev/templates/admin.html"));
-                html = html
-                    .replace("{{ url_for('spav2_admin.admin_logout') }}", "/api/admin/logout")
-                    .replace("{{ url_for('spav2_admin.admin_login') }}", "/api/admin/login")
-                    .replace("{{ url_for('static', filename='js/k/init.js') }}", "/static/js/k/init.js")
-                    .replace("{{ url_for('static', filename='js/k/api.js') }}", "/static/js/k/api.js")
-                    .replace("{{ url_for('static', filename='js/k/ui.js') }}", "/static/js/k/ui.js")
-                    .replace("{{ url_for('static', filename='js/k/admin-page.js') }}", "/static/js/k/admin-page.js");
-                if (user != null) {
-                    String token = authService.generateToken(user);
-                    ctx.cookie("session", token, 604800);
-                    ctx.redirect("/api/admin");
-                    return;
-                }
-                String loginError = user == null && username != null
-                    ? "<div class=\"login-error\">Invalid credentials</div>" : "";
-                html = html
-                    .replace("{{ url_for('spav2_admin.admin_logout') }}", "/api/admin/logout")
-                    .replace("{{ url_for('spav2_admin.admin_login') }}", "/api/admin/login")
-                    .replace("{{ url_for('static', filename='js/k/init.js') }}", "/static/js/k/init.js")
-                    .replace("{{ url_for('static', filename='js/k/api.js') }}", "/static/js/k/api.js")
-                    .replace("{{ url_for('static', filename='js/k/ui.js') }}", "/static/js/k/ui.js")
-                    .replace("{{ url_for('static', filename='js/k/admin-page.js') }}", "/static/js/k/admin-page.js");
-                String IF = "{% if current_user and current_user.is_admin %}";
-                String ELSE = "{% else %}";
-                String ENDIF = "{% endif %}";
-                html = html.replace("{{ current_user.username }}", "");
-                html = html.replace(
-                    "{% if current_user and current_user.is_admin %}\n    <div class=\"user-info\"><i class=\"fas fa-user\"></i> {{ current_user.username }} <a href=\"/api/admin/logout\" class=\"btn btn-sm\">Logout</a></div>\n    {% endif %}",
-                    "");
-                { int a = html.indexOf(IF), b = html.indexOf(ELSE, a), c = html.indexOf(ENDIF, b);
-                  if (a >= 0 && b >= 0 && c >= 0)
-                    html = html.substring(0, a) + html.substring(b + ELSE.length(), c) + html.substring(c + ENDIF.length()); }
-                html = html.replace("{{ login_error }}", "Invalid credentials");
-                html = html.replace("{% if login_error %}", "");
-                html = html.replace("{% endif %}", "");
+            if (user != null) {
+                String token = authService.generateToken(user);
+                ctx.cookie("session", token, 604800);
+                ctx.redirect("/api/admin");
+            } else {
+                String html = loadAdminHtml(ctx);
+                if (html == null) return;
+                html = html.replace("class=\"login-container\"", "class=\"login-container\"")
+                    .replace("<div id=\"loginError\" class=\"login-error hidden\"></div>",
+                        "<div id=\"loginError\" class=\"login-error\">Invalid credentials</div>");
                 ctx.contentType("text/html");
                 ctx.result(html);
-            } catch (Exception e) {
-                ctx.status(500).json(Map.of("success", false, "error",
-                    Map.of("code", "ERROR", "message", "Failed to load admin page")));
             }
         });
 
@@ -89,51 +58,16 @@ public class AdminRoutes {
         app.get("/api/admin", ctx -> {
             User user = authService.getCurrentUser(ctx);
             boolean isAdmin = user != null && user.isAdmin();
-            try {
-                String html = Files.readString(Path.of(
-                    "/Users/dkisel/PycharmProjects/kiselgram-dev/templates/admin.html"));
-                html = html
-                    .replace("{{ url_for('spav2_admin.admin_logout') }}", "/api/admin/logout")
-                    .replace("{{ url_for('spav2_admin.admin_login') }}", "/api/admin/login")
-                    .replace("{{ url_for('static', filename='js/k/init.js') }}", "/static/js/k/init.js")
-                    .replace("{{ url_for('static', filename='js/k/api.js') }}", "/static/js/k/api.js")
-                    .replace("{{ url_for('static', filename='js/k/ui.js') }}", "/static/js/k/ui.js")
-                    .replace("{{ url_for('static', filename='js/k/admin-page.js') }}", "/static/js/k/admin-page.js");
-                String IF = "{% if current_user and current_user.is_admin %}";
-                String ELSE = "{% else %}";
-                String ENDIF = "{% endif %}";
-                String USERIF = "{% if current_user and current_user.is_admin %}\n    <div class=\"user-info\"><i class=\"fas fa-user\"></i> {{ current_user.username }} <a href=\"/api/admin/logout\" class=\"btn btn-sm\">Logout</a></div>\n    {% endif %}";
-                if (isAdmin) {
-                    html = html.replace(USERIF,
-                        "<div class=\"user-info\"><i class=\"fas fa-user\"></i> " + user.getUsername() + " <a href=\"/api/admin/logout\" class=\"btn btn-sm\">Logout</a></div>");
-                    int a = html.indexOf(IF), b = html.indexOf(ELSE, a), c = html.indexOf(ENDIF, b);
-                    if (a >= 0 && b >= 0 && c >= 0)
-                        html = html.substring(0, a) + html.substring(a + IF.length(), b) + html.substring(c + ENDIF.length());
-                } else {
-                    html = html.replace(USERIF, "");
-                    int a = html.indexOf(IF), b = html.indexOf(ELSE, a), c = html.indexOf(ENDIF, b);
-                    if (a >= 0 && b >= 0 && c >= 0)
-                        html = html.substring(0, a) + html.substring(b + ELSE.length(), c) + html.substring(c + ENDIF.length());
-                }
-                html = html.replace("{{ login_error }}", "");
-                int le = html.indexOf("login_error");
-                if (le >= 0) {
-                    int ls = html.lastIndexOf("{%", le);
-                    int le2 = html.indexOf("%}", le) + 2;
-                    if (ls >= 0 && le2 > ls) html = html.substring(0, ls) + html.substring(le2);
-                }
-                le = html.indexOf("login_error");
-                if (le >= 0) {
-                    int ls = html.lastIndexOf("{%", le);
-                    int le2 = html.indexOf("%}", le) + 2;
-                    if (ls >= 0 && le2 > ls) html = html.substring(0, ls) + html.substring(le2);
-                }
-                ctx.contentType("text/html");
-                ctx.result(html);
-            } catch (Exception e) {
-                ctx.status(500).json(Map.of("success", false, "error",
-                    Map.of("code", "ERROR", "message", "Failed to load admin page")));
+            String html = loadAdminHtml(ctx);
+            if (html == null) return;
+            if (isAdmin) {
+                html = html.replace("id=\"userInfo\"></div>",
+                    "id=\"userInfo\"><i class=\"fas fa-user\"></i> " + user.getUsername() + " <a href=\"/api/admin/logout\" class=\"btn btn-sm\">Logout</a>");
+                html = html.replace("id=\"loginView\"", "id=\"loginView\" style=\"display:none\"");
+                html = html.replace("id=\"adminView\" class=\"hidden\"", "id=\"adminView\"");
             }
+            ctx.contentType("text/html");
+            ctx.result(html);
         });
 
         app.get("/api/admin/stats", ctx -> {
@@ -351,6 +285,22 @@ public class AdminRoutes {
             return false;
         }
         return true;
+    }
+
+    private static String loadAdminHtml(Context ctx) {
+        try {
+            InputStream is = AdminRoutes.class.getClassLoader().getResourceAsStream("public/admin.html");
+            if (is == null) {
+                ctx.status(500).json(Map.of("success", false, "error",
+                    Map.of("code", "ERROR", "message", "Admin template not found")));
+                return null;
+            }
+            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            ctx.status(500).json(Map.of("success", false, "error",
+                Map.of("code", "ERROR", "message", "Failed to load admin page")));
+            return null;
+        }
     }
 
     private static int parseIntParam(String val, int def) {
